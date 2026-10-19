@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tic Tac Toe</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/tic-tac-toe/">
+<!--
+  Free HTML Tic Tac Toe game — one file, no libraries. Save it as tic-tac-toe.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  Play against the computer (minimax algorithm) or with a friend on the same device.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    background: #1b1446; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 12px; user-select: none; -webkit-user-select: none;
+  }
+  button { font: inherit; cursor: pointer; }
+  .modes { display: flex; gap: 8px; }
+  .modes button, .again { border: 0; border-radius: 12px; padding: 10px 16px; font-weight: 700; color: #fff; background: #382c8f; box-shadow: 0 4px 0 #20185a; }
+  .modes button.on { background: #ff5fb1; box-shadow: 0 4px 0 #b8327a; }
+  .status { font-size: 22px; font-weight: 800; min-height: 30px; }
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: min(86vw, 330px, calc(100vh - 230px)); aspect-ratio: 1; }
+  .cell { border: 0; border-radius: 18px; background: #2a2170; font-size: min(16vw, 68px, calc((100vh - 230px) / 5)); font-weight: 900; color: #fff; box-shadow: 0 5px 0 #20185a; }
+  .cell.x { color: #3fa6ff; } .cell.o { color: #ffd23f; }
+  .cell.win { background: #36d35a; color: #fff; box-shadow: 0 5px 0 #1d9a3a; }
+  .score { display: flex; gap: 8px; }
+  .score span { background: #2a2170; padding: 6px 12px; border-radius: 10px; font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="modes"><button id="vsCpu" class="on">🤖 vs Computer</button><button id="vsFriend">👥 2 Players</button></div>
+  <div class="status" id="status"></div>
+  <div class="board" id="board"></div>
+  <div class="score"><span id="lx">X</span><span id="ld">Draws: 0</span><span id="lo">O</span></div>
+  <button class="again" id="again">New round</button>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const MISTAKE_CHANCE = 0.2;    // how often the computer plays a random move (0 = it never loses)
+  const CPU_DELAY = 400;         // ms the computer "thinks" before it moves
+  const X = "X", O = "O";        // the two symbols (try emoji like "🐱" and "🐶")
+
+  const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  const $ = id => document.getElementById(id);
+  let board, turn, over, vsCpu = true;
+  const score = { x: 0, o: 0, draw: 0 };
+
+  const cells = [...Array(9)].map((_, i) => {
+    const b = document.createElement("button");
+    b.className = "cell"; b.setAttribute("aria-label", `Square ${i + 1}`);
+    b.addEventListener("click", () => play(i, true));
+    $("board").appendChild(b);
+    return b;
+  });
+
+  // returns { who, line } when someone won, { who: null } for a draw, or null while playing
+  function winner(b) {
+    for (const l of LINES) if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[0]] === b[l[2]]) return { who: b[l[0]], line: l };
+    return b.every(Boolean) ? { who: null } : null;
+  }
+
+  function newRound() { board = Array(9).fill(null); turn = X; over = false; render(); showStatus(); }
+
+  function play(i, human) {
+    if (over || board[i] || (human && vsCpu && turn === O)) return;
+    board[i] = turn;
+    const w = winner(board);
+    if (w) return end(w);
+    turn = turn === X ? O : X;
+    render(); showStatus();
+    if (vsCpu && turn === O) setTimeout(cpuMove, CPU_DELAY);
+  }
+
+  function cpuMove() {
+    if (over) return;
+    const free = board.map((v, i) => v ? -1 : i).filter(i => i >= 0);
+    const i = Math.random() < MISTAKE_CHANCE ? free[Math.floor(Math.random() * free.length)] : best(board, O).i;
+    play(i, false);
+  }
+
+  // minimax: tries every possible game and picks the move with the best guaranteed result
+  function best(b, who, depth = 0) {
+    const w = winner(b);
+    if (w) return { s: w.who === O ? 10 - depth : w.who === X ? depth - 10 : 0 };
+    let pick = { s: who === O ? -Infinity : Infinity };
+    b.forEach((v, i) => {
+      if (v) return;
+      b[i] = who;
+      const s = best(b, who === O ? X : O, depth + 1).s;
+      b[i] = null;
+      if (who === O ? s > pick.s : s < pick.s) pick = { s, i };
+    });
+    return pick;
+  }
+
+  function end(w) {
+    over = true;
+    render();
+    if (w.who) { score[w.who === X ? "x" : "o"]++; w.line.forEach(i => cells[i].classList.add("win")); } else score.draw++;
+    $("status").textContent = !w.who ? "It's a draw!" : vsCpu ? (w.who === X ? "You win! 🎉" : "The computer wins 🤖") : `${w.who} wins! 🎉`;
+    showScore();
+  }
+
+  function render() {
+    cells.forEach((c, i) => {
+      c.textContent = board[i] || "";
+      c.className = "cell" + (board[i] === X ? " x" : board[i] === O ? " o" : "");
+    });
+  }
+  function showStatus() { $("status").textContent = vsCpu ? (turn === X ? `Your turn (${X})` : "Computer is thinking…") : `${turn}'s turn`; }
+  function showScore() {
+    $("lx").textContent = `${X}: ${score.x}`; $("lo").textContent = `${O}: ${score.o}`; $("ld").textContent = `Draws: ${score.draw}`;
+  }
+  function setMode(cpu) {
+    vsCpu = cpu;
+    $("vsCpu").classList.toggle("on", cpu); $("vsFriend").classList.toggle("on", !cpu);
+    score.x = score.o = score.draw = 0; showScore(); newRound();
+  }
+
+  $("vsCpu").addEventListener("click", () => setMode(true));
+  $("vsFriend").addEventListener("click", () => setMode(false));
+  $("again").addEventListener("click", newRound);
+  showScore(); newRound();
+</script>
+</body>
+</html>

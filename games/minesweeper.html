@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Minesweeper</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/minesweeper/">
+<!--
+  Free HTML Minesweeper game — one file, no libraries. Save it as minesweeper.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  Click to open a square. Right-click, long-press or use Flag mode to mark a mine. Your first click is always safe.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    background: #1b1446; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation; padding: 12px;
+  }
+  .bar { width: min(94vw, 400px); display: flex; justify-content: space-between; align-items: center; gap: 6px; font-weight: 800; }
+  .bar span { background: #2a2170; padding: 6px 10px; border-radius: 10px; }
+  .bar button { border: 0; border-radius: 10px; padding: 7px 10px; font: 700 15px system-ui, sans-serif; color: #fff; background: #382c8f; cursor: pointer; }
+  .bar button.on { background: #ff5fb1; }
+  .grid { display: grid; gap: 3px; width: min(94vw, 400px, calc(100vh - 120px)); padding: 6px; background: #382c8f; border-radius: 12px; }
+  .grid button {
+    aspect-ratio: 1; border: 0; border-radius: 5px; background: #6f5cf0; color: #fff; font: 900 min(4.6vw, 20px) system-ui, sans-serif;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); cursor: pointer; padding: 0;
+  }
+  .grid button.open { background: #e9e5ff; box-shadow: none; cursor: default; }
+  .grid button.boom { background: #ff4d6d; }
+  .status { font-size: 20px; font-weight: 800; min-height: 28px; }
+</style>
+</head>
+<body>
+  <div class="bar"><span>💣 <b id="left">0</b></span><button id="flagMode">🚩 Flag: off</button><button id="reset">🙂 New</button><span>⏱ <b id="time">0</b></span></div>
+  <div class="grid" id="grid"></div>
+  <div class="status" id="status">Find all the safe squares</div>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const ROWS = 9;                // board height
+  const COLS = 9;                // board width
+  const MINES = 10;              // number of mines (try 16x16 with 40 for "medium")
+  const NUMBER_COLORS = ["", "#2f6bff", "#18a34a", "#e8343f", "#6b2fd6", "#b3261e", "#0e9aa7", "#222", "#666"];
+
+  const $ = id => document.getElementById(id);
+  const grid = $("grid");
+  grid.style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
+  let cells, started, over, flagMode = false, opened, timer, t0;
+
+  function newGame() {
+    grid.innerHTML = ""; started = false; over = false; opened = 0;
+    clearInterval(timer); $("time").textContent = 0; $("reset").textContent = "🙂 New"; $("status").textContent = "Find all the safe squares";
+    cells = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const b = document.createElement("button");
+      const cell = { r, c, mine: false, open: false, flag: false, n: 0, el: b };
+      b.setAttribute("aria-label", `Row ${r + 1} column ${c + 1}`);
+      let press;   // long-press = flag (phones); the click that follows it must not open the square
+      b.addEventListener("pointerdown", e => { cell.skipClick = false; if (e.pointerType !== "mouse") press = setTimeout(() => { cell.skipClick = true; toggleFlag(cell); }, 380); });
+      ["pointerup", "pointerleave", "pointercancel"].forEach(t => b.addEventListener(t, () => clearTimeout(press)));
+      b.addEventListener("click", () => { if (cell.skipClick) { cell.skipClick = false; return; } flagMode ? toggleFlag(cell) : reveal(cell); });
+      b.addEventListener("contextmenu", e => { e.preventDefault(); toggleFlag(cell); });
+      grid.appendChild(b); cells.push(cell);
+    }
+    updateLeft();
+  }
+
+  const at = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS ? cells[r * COLS + c] : null;
+  const around = cell => { const out = []; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const n = (dr || dc) && at(cell.r + dr, cell.c + dc); if (n) out.push(n); } return out; };
+
+  // mines are placed after the first click, never on or next to it
+  function placeMines(safe) {
+    const banned = new Set([safe, ...around(safe)]);
+    const spots = cells.filter(c => !banned.has(c));
+    for (let i = 0; i < MINES && spots.length; i++) spots.splice(Math.floor(Math.random() * spots.length), 1)[0].mine = true;
+    cells.forEach(c => { c.n = around(c).filter(n => n.mine).length; });
+  }
+
+  function reveal(cell) {
+    if (over || cell.open || cell.flag) return;
+    if (!started) { started = true; placeMines(cell); t0 = Date.now(); timer = setInterval(() => { $("time").textContent = Math.floor((Date.now() - t0) / 1000); }, 1000); }
+    if (cell.mine) return lose(cell);
+    const stack = [cell];                                // flood fill: open every empty area at once
+    while (stack.length) {
+      const c = stack.pop();
+      if (c.open || c.flag) continue;
+      c.open = true; opened++;
+      c.el.className = "open"; c.el.textContent = c.n || ""; c.el.style.color = NUMBER_COLORS[c.n];
+      if (c.n === 0) around(c).forEach(n => !n.open && stack.push(n));
+    }
+    if (opened === ROWS * COLS - MINES) win();
+  }
+
+  function toggleFlag(cell) {
+    if (over || cell.open) return;
+    cell.flag = !cell.flag; cell.el.textContent = cell.flag ? "🚩" : "";
+    updateLeft();
+  }
+
+  function updateLeft() { $("left").textContent = MINES - cells.filter(c => c.flag).length; }
+
+  function lose(cell) {
+    over = true; clearInterval(timer);
+    cells.forEach(c => { if (c.mine) { c.el.textContent = "💣"; c.el.className = "open"; } });
+    cell.el.className = "open boom";
+    $("reset").textContent = "😵 New"; $("status").textContent = "💥 Boom! Try again.";
+  }
+
+  function win() {
+    over = true; clearInterval(timer);
+    cells.forEach(c => { if (c.mine) c.el.textContent = "🚩"; });
+    $("reset").textContent = "😎 New"; $("status").textContent = `🎉 You cleared it in ${$("time").textContent} seconds!`;
+  }
+
+  $("reset").addEventListener("click", newGame);
+  $("flagMode").addEventListener("click", () => { flagMode = !flagMode; $("flagMode").textContent = `🚩 Flag: ${flagMode ? "on" : "off"}`; $("flagMode").classList.toggle("on", flagMode); });
+  newGame();
+</script>
+</body>
+</html>

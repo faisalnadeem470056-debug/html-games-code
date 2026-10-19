@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Space Shooter Game</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/space-shooter/">
+<!--
+  Free HTML Space Shooter game — one file, no libraries, no images. Save it as space-shooter.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  Your ship fires on its own. Move with the mouse, your finger or the arrow keys, and don't let the aliens pass.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #070417;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  canvas { display: block; width: min(96vw, 400px, calc((100vh - 16px) * 2 / 3)); aspect-ratio: 2 / 3; border-radius: 18px; background: #0b0726; box-shadow: 0 0 0 3px #382c8f; cursor: crosshair; }
+</style>
+</head>
+<body>
+<canvas id="game" width="360" height="540"></canvas>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const LIVES = 3;               // lives you start with
+  const FIRE_EVERY = 11;         // frames between shots (lower = faster fire)
+  const ENEMY_SPEED = 1.4;       // how fast the aliens fall at the start
+  const SPAWN_EVERY = 55;        // frames between new aliens at the start
+  const SHIP_SPEED = 6;          // keyboard speed
+  const ENEMIES = ["👾", "👽", "🛸"];   // what the aliens look like
+
+  const canvas = document.getElementById("game"), ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  const load = k => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } };
+  const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  const stars = [...Array(60)].map(() => ({ x: Math.random() * W, y: Math.random() * H, s: 0.5 + Math.random() * 2 }));
+  const keys = {};
+  let ship, bullets, enemies, sparks, lives, score, frame, state, hurt, best = load("shooter-best");
+
+  function reset() {
+    ship = { x: W / 2, y: H - 60 }; bullets = []; enemies = []; sparks = [];
+    lives = LIVES; score = 0; frame = 0; hurt = 0; state = "ready";
+  }
+
+  function update() {
+    stars.forEach(s => { s.y += s.s; if (s.y > H) { s.y = 0; s.x = Math.random() * W; } });
+    sparks.forEach(p => { p.x += p.vx; p.y += p.vy; p.life--; });
+    sparks = sparks.filter(p => p.life > 0);
+    if (state !== "play") return;
+    frame++;
+    if (keys.ArrowLeft) ship.x -= SHIP_SPEED;
+    if (keys.ArrowRight) ship.x += SHIP_SPEED;
+    ship.x = Math.max(20, Math.min(W - 20, ship.x));
+    if (hurt) hurt--;
+
+    if (frame % FIRE_EVERY === 0) bullets.push({ x: ship.x, y: ship.y - 22 });
+    bullets.forEach(b => b.y -= 9);
+    bullets = bullets.filter(b => b.y > -10);
+
+    const level = 1 + frame / 1800;                                   // everything speeds up over time
+    if (frame % Math.max(18, Math.round(SPAWN_EVERY / level)) === 0) {
+      const big = Math.random() < 0.2;
+      enemies.push({ x: 24 + Math.random() * (W - 48), y: -20, hp: big ? 3 : 1, size: big ? 40 : 28, look: ENEMIES[Math.floor(Math.random() * ENEMIES.length)], t: Math.random() * 6, v: ENEMY_SPEED * level * (big ? 0.7 : 1) });
+    }
+    for (const e of enemies) {
+      e.y += e.v; e.t += 0.05; e.x += Math.sin(e.t) * 0.8;
+      for (const b of bullets) if (!b.hit && e.hp > 0 && Math.abs(b.x - e.x) < e.size / 2 && Math.abs(b.y - e.y) < e.size / 2) {
+        b.hit = true; e.hp--;
+        if (e.hp <= 0) { score += e.size > 30 ? 30 : 10; boom(e.x, e.y, "#ffd23f"); }
+      }
+      if (e.hp > 0 && Math.abs(e.x - ship.x) < e.size / 2 + 14 && Math.abs(e.y - ship.y) < e.size / 2 + 14) { e.hp = 0; boom(e.x, e.y, "#ff4d6d"); loseLife(); }
+      if (e.hp > 0 && e.y > H + 20) { e.hp = 0; loseLife(); }
+    }
+    bullets = bullets.filter(b => !b.hit);
+    enemies = enemies.filter(e => e.hp > 0);
+  }
+
+  function loseLife() {
+    if (hurt) return;
+    lives--; hurt = 60;
+    if (lives <= 0) { state = "over"; boom(ship.x, ship.y, "#3fd8ff"); if (score > best) { best = score; save("shooter-best", best); } }
+  }
+
+  function boom(x, y, color) {
+    for (let i = 0; i < 16; i++) { const a = Math.random() * 7, s = 1 + Math.random() * 3; sparks.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 20 + Math.random() * 15, color }); }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#fff";
+    stars.forEach(s => { ctx.globalAlpha = s.s / 2.5; ctx.fillRect(s.x, s.y, s.s, s.s); });
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#7dff5a"; bullets.forEach(b => ctx.fillRect(b.x - 2, b.y - 8, 4, 14));
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    enemies.forEach(e => { ctx.font = `${e.size}px system-ui, sans-serif`; ctx.fillText(e.look, e.x, e.y); });
+    sparks.forEach(p => { ctx.globalAlpha = p.life / 35; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 3, 3); });
+    ctx.globalAlpha = 1;
+    if (state !== "over" && !(hurt && Math.floor(hurt / 5) % 2)) {   // the ship blinks after a hit
+      ctx.fillStyle = "#3fd8ff"; ctx.beginPath();
+      ctx.moveTo(ship.x, ship.y - 22); ctx.lineTo(ship.x + 18, ship.y + 14); ctx.lineTo(ship.x, ship.y + 6); ctx.lineTo(ship.x - 18, ship.y + 14); ctx.fill();
+      ctx.fillStyle = "#ff8a3d"; ctx.fillRect(ship.x - 4, ship.y + 8, 8, 6 + (frame % 6));
+    }
+    ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#fff"; ctx.font = "700 16px system-ui, sans-serif";
+    ctx.textAlign = "left"; ctx.fillText(`Score ${score}`, 12, 26);
+    ctx.textAlign = "right"; ctx.fillText("❤".repeat(Math.max(0, lives)), W - 12, 26);
+    ctx.textAlign = "center";
+    if (state !== "play") {
+      ctx.font = "900 36px system-ui, sans-serif";
+      ctx.fillText(state === "ready" ? "Space Shooter" : "Game over", W / 2, H / 2 - 30);
+      ctx.font = "700 18px system-ui, sans-serif";
+      if (state === "over") ctx.fillText(`Score ${score} · Best ${best}`, W / 2, H / 2 + 8);
+      ctx.fillText("Tap or press Space to start", W / 2, H / 2 + 44);
+    }
+  }
+
+  let last = 0, acc = 0;
+  function loop(t) {
+    acc += Math.min(100, t - (last || t)); last = t;
+    while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function start() { if (state === "play") return; reset(); state = "play"; }
+  const toCanvasX = e => { const r = canvas.getBoundingClientRect(); return (e.clientX - r.left) * W / r.width; };
+  canvas.addEventListener("pointermove", e => { if (state === "play" && (e.pointerType === "mouse" || e.buttons)) ship.x = toCanvasX(e); });
+  canvas.addEventListener("pointerdown", e => { e.preventDefault(); start(); ship.x = toCanvasX(e); });
+  document.addEventListener("keydown", e => {
+    if (e.key === " ") { e.preventDefault(); start(); }
+    if (e.key.startsWith("Arrow")) { e.preventDefault(); keys[e.key] = true; }
+  });
+  document.addEventListener("keyup", e => { keys[e.key] = false; });
+  reset();
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

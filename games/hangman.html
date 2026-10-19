@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hangman Game</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/hangman/">
+<!--
+  Free HTML Hangman word game — one file, no libraries. Save it as hangman.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  Guess the hidden word one letter at a time, with the on-screen keyboard or your real keyboard.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    background: #1b1446; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 12px; user-select: none; -webkit-user-select: none; text-align: center;
+  }
+  svg { width: min(52vw, 190px, calc(100vh - 430px)); min-width: 90px; height: auto; }
+  svg .part { stroke: #fff; stroke-width: 6; stroke-linecap: round; fill: none; opacity: 0; transition: opacity .25s; }
+  svg .part.show { opacity: 1; }
+  .hint { font-weight: 700; opacity: .85; }
+  .word { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; font-size: min(8vw, 32px); font-weight: 900; }
+  .word span { width: 1.1em; border-bottom: 4px solid #ffd23f; text-transform: uppercase; }
+  .word span.miss { color: #ff4d6d; }
+  .lives { font-weight: 700; }
+  .keys { display: grid; grid-template-columns: repeat(9, 1fr); gap: 5px; width: min(94vw, 420px); }
+  .keys button { aspect-ratio: 1; border: 0; border-radius: 8px; font: 800 min(4.4vw, 18px) system-ui, sans-serif; color: #fff; background: #382c8f; box-shadow: 0 3px 0 #20185a; cursor: pointer; text-transform: uppercase; padding: 0; }
+  .keys button.good { background: #36d35a; box-shadow: none; }
+  .keys button.bad { background: #2a2170; color: #6b63a8; box-shadow: none; }
+  .result { font-size: 22px; font-weight: 900; min-height: 30px; }
+  #again { border: 0; border-radius: 14px; padding: 12px 26px; font: 700 18px system-ui, sans-serif; color: #fff; background: #36d35a; box-shadow: 0 4px 0 #1d9a3a; cursor: pointer; }
+  #again[hidden] { display: none; }
+</style>
+</head>
+<body>
+  <svg viewBox="0 0 200 200" aria-hidden="true">
+    <path d="M20 190 H120 M50 190 V20 H130 V40" stroke="#8b7cff" stroke-width="6" stroke-linecap="round" fill="none"/>
+    <circle class="part" cx="130" cy="58" r="18"/>
+    <path class="part" d="M130 76 V128"/>
+    <path class="part" d="M130 90 L106 112"/>
+    <path class="part" d="M130 90 L154 112"/>
+    <path class="part" d="M130 128 L110 162"/>
+    <path class="part" d="M130 128 L150 162"/>
+  </svg>
+  <div class="hint" id="hint"></div>
+  <div class="word" id="word"></div>
+  <div class="lives" id="lives"></div>
+  <div class="result" id="result"></div>
+  <div class="keys" id="keys"></div>
+  <button id="again" hidden>Next word</button>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const WORDS = {                // category: list of words (letters only)
+    Animals: ["elephant", "giraffe", "penguin", "dolphin", "kangaroo", "squirrel", "octopus", "cheetah", "flamingo", "hamster"],
+    Fruits: ["banana", "mango", "pineapple", "strawberry", "watermelon", "cherry", "apricot", "blueberry", "coconut", "papaya"],
+    Countries: ["canada", "brazil", "japan", "egypt", "mexico", "norway", "kenya", "france", "chile", "portugal"],
+    Sports: ["football", "cricket", "tennis", "hockey", "baseball", "swimming", "volleyball", "badminton", "cycling", "karate"],
+    Space: ["planet", "comet", "galaxy", "rocket", "orbit", "meteor", "nebula", "asteroid", "telescope", "astronaut"]
+  };
+  const MAX_WRONG = 6;           // wrong guesses allowed (the drawing has 6 parts)
+
+  const $ = id => document.getElementById(id);
+  const parts = [...document.querySelectorAll(".part")];
+  let word, guessed, wrong, done;
+
+  const keys = "abcdefghijklmnopqrstuvwxyz".split("").map(l => {
+    const b = document.createElement("button");
+    b.textContent = l; b.addEventListener("click", () => guess(l));
+    $("keys").appendChild(b);
+    return b;
+  });
+
+  function newWord() {
+    const cats = Object.keys(WORDS), cat = cats[Math.floor(Math.random() * cats.length)];
+    word = WORDS[cat][Math.floor(Math.random() * WORDS[cat].length)].toLowerCase();
+    guessed = new Set(); wrong = 0; done = false;
+    $("hint").textContent = `Category: ${cat} · ${word.length} letters`;
+    $("result").textContent = ""; $("again").hidden = true;
+    keys.forEach(k => { k.className = ""; k.disabled = false; });
+    render();
+  }
+
+  function guess(l) {
+    if (done || guessed.has(l)) return;
+    guessed.add(l);
+    const key = keys[l.charCodeAt(0) - 97];
+    key.disabled = true;
+    if (word.includes(l)) key.className = "good";
+    else { key.className = "bad"; wrong++; }
+    render();
+    if ([...word].every(ch => guessed.has(ch))) finish(true);
+    else if (wrong >= MAX_WRONG) finish(false);
+  }
+
+  function finish(won) {
+    done = true;
+    $("result").textContent = won ? "🎉 You got it!" : `😵 The word was "${word.toUpperCase()}"`;
+    $("again").hidden = false;
+    if (!won) render(true);
+  }
+
+  function render(reveal) {
+    $("word").innerHTML = [...word].map(ch => {
+      const shown = guessed.has(ch);
+      return `<span class="${!shown && reveal ? "miss" : ""}">${shown || reveal ? ch : "&nbsp;"}</span>`;
+    }).join("");
+    parts.forEach((p, i) => p.classList.toggle("show", i < Math.ceil(wrong * parts.length / MAX_WRONG)));
+    $("lives").textContent = `Wrong guesses left: ${MAX_WRONG - wrong}`;
+  }
+
+  document.addEventListener("keydown", e => {
+    if (/^[a-z]$/i.test(e.key)) guess(e.key.toLowerCase());
+    if (e.key === "Enter" && done) newWord();
+  });
+  $("again").addEventListener("click", newWord);
+  newWord();
+</script>
+</body>
+</html>

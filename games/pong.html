@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Pong Game</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/pong/">
+<!--
+  Free HTML Pong game — one file, no libraries. Save it as pong.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  You are the bottom paddle; the computer plays the top. Move with the mouse, your finger or the arrow keys.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #1b1446;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  canvas { display: block; width: min(96vw, 400px, calc((100vh - 16px) * 2 / 3)); aspect-ratio: 2 / 3; border-radius: 18px; background: #0f5a3c; box-shadow: 0 0 0 4px #fff, 0 18px 40px rgba(0,0,0,.4); }
+</style>
+</head>
+<body>
+<canvas id="game" width="360" height="540"></canvas>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const WIN_SCORE = 7;           // first to this many points wins
+  const BALL_SPEED = 5;          // speed after each serve
+  const SPEED_UP = 0.35;         // extra speed on every paddle hit
+  const AI_SPEED = 4.2;          // how fast the computer paddle moves (higher = harder)
+  const PADDLE_WIDTH = 80;       // both paddles
+
+  const canvas = document.getElementById("game"), ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height, PH = 12, YOU_Y = H - 30, CPU_Y = 30 - PH;
+  let you, cpu, ball, score, state, serveTimer;
+  const keys = {};
+
+  function newGame() { score = { you: 0, cpu: 0 }; you = W / 2; cpu = W / 2; state = "ready"; placeBall(1); }
+  function placeBall(dir) { ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 8, dir }; serveTimer = 50; }
+  function start() { if (state === "ready" || state === "over") { if (state === "over") newGame(); state = "play"; } }
+
+  function update() {
+    if (keys.ArrowLeft) you -= 7;
+    if (keys.ArrowRight) you += 7;
+    you = clamp(you);
+    if (state !== "play") return;
+
+    if (serveTimer > 0 && --serveTimer === 0) {               // serve towards whoever lost the last point
+      const a = (Math.random() - 0.5) * 0.9;
+      ball.vx = Math.sin(a) * BALL_SPEED; ball.vy = Math.cos(a) * BALL_SPEED * ball.dir;
+    }
+    // computer: follows the ball, but no faster than AI_SPEED
+    const target = ball.vy < 0 ? ball.x : W / 2;
+    cpu = clamp(cpu + Math.max(-AI_SPEED, Math.min(AI_SPEED, target - cpu)));
+
+    ball.x += ball.vx; ball.y += ball.vy;
+    if (ball.x < ball.r || ball.x > W - ball.r) { ball.vx *= -1; ball.x = Math.max(ball.r, Math.min(W - ball.r, ball.x)); }
+    hitPaddle(you, YOU_Y, -1);
+    hitPaddle(cpu, CPU_Y + PH, 1);
+
+    if (ball.y > H + 20) point("cpu", 1);
+    if (ball.y < -20) point("you", -1);
+  }
+
+  function hitPaddle(px, py, dir) {
+    const coming = dir === -1 ? ball.vy > 0 && ball.y + ball.r >= py && ball.y < py + PH : ball.vy < 0 && ball.y - ball.r <= py && ball.y > py - PH;
+    if (!coming || Math.abs(ball.x - px) > PADDLE_WIDTH / 2 + ball.r) return;
+    const hit = (ball.x - px) / (PADDLE_WIDTH / 2), speed = Math.hypot(ball.vx, ball.vy) + SPEED_UP;
+    ball.vx = Math.sin(hit) * speed; ball.vy = Math.cos(hit) * speed * dir;
+    ball.y = dir === -1 ? py - ball.r : py + ball.r;
+  }
+
+  function point(who, dir) {
+    score[who]++;
+    if (score[who] >= WIN_SCORE) { state = "over"; ball.vx = ball.vy = 0; return; }
+    placeBall(dir);
+  }
+
+  const clamp = x => Math.max(PADDLE_WIDTH / 2, Math.min(W - PADDLE_WIDTH / 2, x));
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 3; ctx.setLineDash([12, 10]);
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = "900 64px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(255,255,255,.25)";
+    ctx.fillText(score.cpu, W / 2, H / 2 - 40); ctx.fillText(score.you, W / 2, H / 2 + 90);
+
+    ctx.fillStyle = "#ffd23f"; ctx.fillRect(cpu - PADDLE_WIDTH / 2, CPU_Y, PADDLE_WIDTH, PH);
+    ctx.fillStyle = "#fff"; ctx.fillRect(you - PADDLE_WIDTH / 2, YOU_Y, PADDLE_WIDTH, PH);
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, 7); ctx.fill();
+
+    if (state !== "play") {
+      ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#fff";
+      ctx.font = "900 40px system-ui, sans-serif";
+      ctx.fillText(state === "ready" ? "Pong" : score.you > score.cpu ? "You win! 🎉" : "Computer wins", W / 2, H / 2 - 20);
+      ctx.font = "700 20px system-ui, sans-serif";
+      ctx.fillText(state === "ready" ? `First to ${WIN_SCORE} points` : `${score.you} – ${score.cpu}`, W / 2, H / 2 + 20);
+      ctx.fillText("Tap or press Space to play", W / 2, H / 2 + 60);
+    }
+  }
+
+  let last = 0, acc = 0;
+  function loop(t) {
+    acc += Math.min(100, t - (last || t)); last = t;
+    while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  const toCanvasX = e => { const r = canvas.getBoundingClientRect(); return (e.clientX - r.left) * W / r.width; };
+  canvas.addEventListener("pointermove", e => { you = clamp(toCanvasX(e)); });
+  canvas.addEventListener("pointerdown", e => { e.preventDefault(); you = clamp(toCanvasX(e)); start(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === " ") { e.preventDefault(); start(); }
+    if (e.key.startsWith("Arrow")) { e.preventDefault(); keys[e.key] = true; }
+  });
+  document.addEventListener("keyup", e => { keys[e.key] = false; });
+  newGame();
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

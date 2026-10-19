@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Connect Four</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/connect-four/">
+<!--
+  Free HTML Connect Four game — one file, no libraries. Save it as connect-four.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  Drop discs into the columns. Four in a row (across, down or diagonal) wins. Play the computer or a friend.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    background: #1b1446; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation; padding: 12px;
+  }
+  .modes { display: flex; gap: 8px; }
+  .modes button, #again { border: 0; border-radius: 12px; padding: 9px 14px; font: 700 15px system-ui, sans-serif; color: #fff; background: #382c8f; box-shadow: 0 4px 0 #20185a; cursor: pointer; }
+  .modes button.on { background: #ff5fb1; box-shadow: 0 4px 0 #b8327a; }
+  .status { font-size: 20px; font-weight: 800; min-height: 28px; display: flex; align-items: center; gap: 8px; }
+  .status i { width: 20px; height: 20px; border-radius: 50%; display: inline-block; }
+  .board { display: grid; gap: 6px; padding: 10px; width: min(94vw, 420px, calc((100vh - 170px) * 7 / 6)); background: #3f7bff; border-radius: 18px; box-shadow: 0 8px 0 #2448b5; }
+  .slot { aspect-ratio: 1; border-radius: 50%; background: #1b1446; position: relative; cursor: pointer; }
+  .slot i { position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 -4px 0 rgba(0,0,0,.25); }
+  .slot i.drop { animation: drop .35s cubic-bezier(.5, 0, .75, 0) both; }
+  .slot.win i { outline: 4px solid #fff; outline-offset: -6px; }
+  @keyframes drop { from { transform: translateY(var(--from)); } to { transform: translateY(0); } }
+</style>
+</head>
+<body>
+  <div class="modes"><button id="vsCpu" class="on">🤖 vs Computer</button><button id="vsFriend">👥 2 Players</button></div>
+  <div class="status" id="status"></div>
+  <div class="board" id="board"></div>
+  <button id="again">New game</button>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const ROWS = 6;                // board height
+  const COLS = 7;                // board width
+  const CPU_DELAY = 450;         // ms the computer waits before it plays
+  const COLORS = ["#ff4d6d", "#ffd23f"];   // player 1 and player 2 disc colors
+
+  const $ = id => document.getElementById(id);
+  const board = $("board");
+  board.style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
+  let grid, turn, over, vsCpu = true;
+
+  const slots = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const s = document.createElement("div");
+    s.className = "slot"; s.addEventListener("click", () => humanPlay(c));
+    board.appendChild(s); slots.push(s);
+  }
+
+  function newGame() {
+    grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    turn = 1; over = false;
+    slots.forEach(s => { s.innerHTML = ""; s.className = "slot"; });
+    status();
+  }
+
+  const lowestFree = (g, c) => { for (let r = ROWS - 1; r >= 0; r--) if (!g[r][c]) return r; return -1; };
+
+  // the 4 cells in a winning line through (r, c), or null
+  function winLine(g, r, c) {
+    const p = g[r][c];
+    for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+      const line = [[r, c]];
+      for (const s of [1, -1]) {
+        let rr = r + dr * s, cc = c + dc * s;
+        while (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && g[rr][cc] === p) { line.push([rr, cc]); rr += dr * s; cc += dc * s; }
+      }
+      if (line.length >= 4) return line;
+    }
+    return null;
+  }
+
+  function humanPlay(c) { if (!over && !(vsCpu && turn === 2)) drop(c); }
+
+  function drop(c) {
+    const r = lowestFree(grid, c);
+    if (r < 0) return;
+    grid[r][c] = turn;
+    const disc = document.createElement("i");
+    disc.className = "drop"; disc.style.background = COLORS[turn - 1];
+    disc.style.setProperty("--from", `-${(r + 1) * 110}%`);    // falls from above the board
+    slots[r * COLS + c].appendChild(disc);
+    const line = winLine(grid, r, c);
+    if (line) {
+      over = true;
+      line.forEach(([rr, cc]) => slots[rr * COLS + cc].classList.add("win"));
+      return status(vsCpu ? (turn === 1 ? "You win! 🎉" : "The computer wins 🤖") : `Player ${turn} wins! 🎉`);
+    }
+    if (grid[0].every(Boolean)) { over = true; return status("It's a draw!"); }
+    turn = 3 - turn;
+    status();
+    if (vsCpu && turn === 2) setTimeout(cpuMove, CPU_DELAY);
+  }
+
+  // simple but decent AI: win if it can, block your win, avoid setting you up, prefer the middle
+  function cpuMove() {
+    if (over) return;
+    const free = [...Array(COLS).keys()].filter(c => lowestFree(grid, c) >= 0);
+    const winsWith = (c, p) => { const g = grid.map(row => row.slice()), r = lowestFree(g, c); g[r][c] = p; return !!winLine(g, r, c); };
+    const givesWin = c => {
+      const g = grid.map(row => row.slice()), r = lowestFree(g, c); g[r][c] = 2;
+      if (r === 0) return false;
+      g[r - 1][c] = 1; return !!winLine(g, r - 1, c);
+    };
+    let pick = free.find(c => winsWith(c, 2));
+    if (pick === undefined) pick = free.find(c => winsWith(c, 1));
+    if (pick === undefined) {
+      const safe = free.filter(c => !givesWin(c)), options = safe.length ? safe : free;
+      const score = new Map(options.map(c => [c, -Math.abs(c - (COLS - 1) / 2) + Math.random() * 1.5]));
+      pick = options.sort((a, b) => score.get(b) - score.get(a))[0];
+    }
+    drop(pick);
+  }
+
+  function status(text) {
+    $("status").innerHTML = text ? text : `<i style="background:${COLORS[turn - 1]}"></i>${vsCpu ? (turn === 1 ? "Your turn" : "Computer is thinking…") : `Player ${turn}'s turn`}`;
+  }
+  function setMode(cpu) { vsCpu = cpu; $("vsCpu").classList.toggle("on", cpu); $("vsFriend").classList.toggle("on", !cpu); newGame(); }
+
+  $("vsCpu").addEventListener("click", () => setMode(true));
+  $("vsFriend").addEventListener("click", () => setMode(false));
+  $("again").addEventListener("click", newGame);
+  document.addEventListener("keydown", e => { const c = Number(e.key) - 1; if (c >= 0 && c < COLS) humanPlay(c); });
+  newGame();
+</script>
+</body>
+</html>

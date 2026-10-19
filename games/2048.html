@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>2048 Game</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/2048/">
+<!--
+  Free HTML 2048 game — one file, no libraries. Save it as 2048.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  Controls: arrow keys / WASD, or swipe on phones. Join equal numbers to reach 2048.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    background: #1b1446; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: none; padding: 12px;
+  }
+  .bar { width: min(92vw, 400px); display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 700; }
+  .bar span { background: #2a2170; padding: 6px 12px; border-radius: 10px; }
+  .bar button { border: 0; border-radius: 10px; padding: 7px 12px; font: inherit; color: #fff; background: #ff5fb1; cursor: pointer; }
+  .board { position: relative; display: grid; gap: 10px; padding: 10px; width: min(92vw, 400px, calc(100vh - 90px)); aspect-ratio: 1; background: #382c8f; border-radius: 16px; }
+  .tile { display: grid; place-items: center; border-radius: 10px; background: rgba(255,255,255,.08); font-weight: 900; color: #1b1446; }
+  .tile.new { animation: pop .18s ease-out; }
+  .tile.merged { animation: pop .18s ease-out reverse; }
+  @keyframes pop { from { transform: scale(.4); } to { transform: scale(1); } }
+  .msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; background: rgba(27, 20, 70, .8); border-radius: 16px; }
+  .msg[hidden] { display: none; }
+  .msg h1 { font-size: 34px; margin-bottom: 12px; }
+  .msg button { border: 0; border-radius: 14px; padding: 12px 24px; font: 700 18px system-ui, sans-serif; color: #fff; background: #36d35a; box-shadow: 0 4px 0 #1d9a3a; cursor: pointer; margin: 4px; }
+</style>
+</head>
+<body>
+  <div class="bar"><span>Score: <b id="score">0</b></span><span>Best: <b id="best">0</b></span><button id="restart">New game</button></div>
+  <div class="board" id="board"><div class="msg" id="msg" hidden><div><h1 id="title"></h1><button id="again">Try again</button><button id="keep">Keep going</button></div></div></div>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const SIZE = 4;                // tiles per row (try 5 for an easier game)
+  const WIN_TILE = 2048;         // the tile you need to win
+  const FOUR_CHANCE = 0.1;       // chance a new tile is a 4 instead of a 2
+  const COLORS = { 2: "#fff4d6", 4: "#ffe3a3", 8: "#ffc46b", 16: "#ff9f5a", 32: "#ff7b6b", 64: "#ff5f8f", 128: "#ffd23f", 256: "#b9f26b", 512: "#5be3a5", 1024: "#5ec8ff", 2048: "#b46bff" };
+
+  const $ = id => document.getElementById(id);
+  const load = k => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } };
+  const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  const board = $("board");
+  board.style.gridTemplateColumns = `repeat(${SIZE}, 1fr)`;
+  const tiles = [...Array(SIZE * SIZE)].map(() => board.insertBefore(document.createElement("div"), $("msg")));
+  let cells, score, best = load("2048-best"), won, fresh, merged;
+
+  function newGame() {
+    cells = Array(SIZE * SIZE).fill(0); score = 0; won = false; fresh = new Set(); merged = new Set();
+    addTile(); addTile(); $("msg").hidden = true; render();
+  }
+
+  function addTile() {
+    const empty = cells.map((v, i) => v ? -1 : i).filter(i => i >= 0);
+    if (!empty.length) return;
+    const i = empty[Math.floor(Math.random() * empty.length)];
+    cells[i] = Math.random() < FOUR_CHANCE ? 4 : 2; fresh.add(i);
+  }
+
+  // slide one row to the left: [2,0,2,4] → [4,4,0,0]
+  function slide(row) {
+    const nums = row.filter(Boolean), out = [], hits = [];
+    for (let i = 0; i < nums.length; i++) {
+      if (nums[i] === nums[i + 1]) { out.push(nums[i] * 2); score += nums[i] * 2; hits.push(out.length - 1); i++; }
+      else out.push(nums[i]);
+    }
+    while (out.length < SIZE) out.push(0);
+    return { out, hits };
+  }
+
+  // every direction is "slide left" on the right list of cell indexes
+  function lines(dir) {
+    const L = [];
+    for (let a = 0; a < SIZE; a++) {
+      const line = [];
+      for (let b = 0; b < SIZE; b++) {
+        const [r, c] = dir === "left" ? [a, b] : dir === "right" ? [a, SIZE - 1 - b] : dir === "up" ? [b, a] : [SIZE - 1 - b, a];
+        line.push(r * SIZE + c);
+      }
+      L.push(line);
+    }
+    return L;
+  }
+
+  function move(dir) {
+    if (!$("msg").hidden) return;
+    let changed = false; fresh = new Set(); merged = new Set();
+    for (const idx of lines(dir)) {
+      const { out, hits } = slide(idx.map(i => cells[i]));
+      idx.forEach((i, k) => { if (cells[i] !== out[k]) changed = true; cells[i] = out[k]; });
+      hits.forEach(k => merged.add(idx[k]));
+    }
+    if (!changed) return;
+    addTile();
+    if (score > best) { best = score; save("2048-best", best); }
+    render();
+    if (!won && cells.includes(WIN_TILE)) { won = true; show("You made " + WIN_TILE + "! 🎉", true); }
+    else if (!canMove()) show("No more moves", false);
+  }
+
+  function canMove() {
+    return cells.some((v, i) => !v || (i % SIZE < SIZE - 1 && v === cells[i + 1]) || (i + SIZE < cells.length && v === cells[i + SIZE]));
+  }
+
+  function show(text, canKeep) { $("title").textContent = text; $("keep").hidden = !canKeep; $("msg").hidden = false; }
+
+  function render() {
+    tiles.forEach((t, i) => {
+      const v = cells[i];
+      t.className = "tile" + (fresh.has(i) ? " new" : merged.has(i) ? " merged" : "");
+      t.textContent = v || "";
+      t.style.background = v ? (COLORS[v] || "#fff") : "";
+      t.style.fontSize = `min(${v >= 1000 ? 6 : v >= 100 ? 7.5 : 9}vw, ${(v >= 1000 ? 30 : v >= 100 ? 36 : 42) * 4 / SIZE}px)`;
+    });
+    $("score").textContent = score; $("best").textContent = best;
+  }
+
+  document.addEventListener("keydown", e => {
+    const map = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", a: "left", d: "right", w: "up", s: "down" };
+    if (map[e.key]) { e.preventDefault(); move(map[e.key]); }
+  });
+  let sx, sy;
+  board.addEventListener("pointerdown", e => { sx = e.clientX; sy = e.clientY; });
+  board.addEventListener("pointerup", e => {
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 25) return;
+    move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+  });
+  $("restart").addEventListener("click", newGame);
+  $("again").addEventListener("click", newGame);
+  $("keep").addEventListener("click", () => { $("msg").hidden = true; });
+  newGame();
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Simon Says Game</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/simon/">
+<!--
+  Free HTML Simon Says memory game — one file, no libraries, sounds made with the Web Audio API.
+  Save it as simon.html and open it in a browser. From htmlgamescode.com (free to use in your own projects).
+  Watch the colors light up, then repeat the pattern. It gets one step longer every round.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: #1b1446; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation; padding: 12px;
+  }
+  .bar { display: flex; gap: 10px; font-weight: 800; }
+  .bar span { background: #2a2170; padding: 6px 14px; border-radius: 10px; }
+  .simon { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: min(86vw, 360px, calc(100vh - 130px)); aspect-ratio: 1; padding: 12px; border-radius: 50%; background: #120d35; }
+  .pad { border: 0; cursor: pointer; opacity: .45; transition: opacity .1s, transform .1s; }
+  .pad.lit { opacity: 1; transform: scale(1.03); }
+  .pad:nth-child(1) { background: #36d35a; border-radius: 100% 0 0 0; }
+  .pad:nth-child(2) { background: #ff4d6d; border-radius: 0 100% 0 0; }
+  .pad:nth-child(3) { background: #ffd23f; border-radius: 0 0 0 100%; }
+  .pad:nth-child(4) { background: #3fa6ff; border-radius: 0 0 100% 0; }
+  .center { position: absolute; inset: 32%; border-radius: 50%; background: #1b1446; display: grid; place-items: center; text-align: center; font-weight: 900; font-size: 15px; border: 6px solid #120d35; }
+  .center button { border: 0; background: none; color: #fff; font: inherit; font-size: 18px; cursor: pointer; width: 100%; height: 100%; border-radius: 50%; }
+  .status { font-size: 20px; font-weight: 800; min-height: 28px; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="bar"><span>Round: <b id="round">0</b></span><span>Best: <b id="best">0</b></span></div>
+  <div class="simon" id="simon">
+    <button class="pad" aria-label="Green"></button><button class="pad" aria-label="Red"></button>
+    <button class="pad" aria-label="Yellow"></button><button class="pad" aria-label="Blue"></button>
+    <div class="center"><button id="start">▶ Start</button></div>
+  </div>
+  <div class="status" id="status">Press Start, then repeat the colors</div>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const START_SPEED = 600;       // ms each color stays lit in round 1
+  const SPEED_UP = 25;           // ms faster every round
+  const MIN_SPEED = 220;         // fastest playback
+  const STRICT = false;          // true = one mistake ends the game; false = the pattern is shown again
+  const TONES = [329.6, 261.6, 220, 164.8];   // the note of each pad (Hz)
+
+  const $ = id => document.getElementById(id);
+  const pads = [...document.querySelectorAll(".pad")];
+  const load = k => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } };
+  const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  let seq = [], step = 0, accepting = false, best = load("simon-best"), audio;
+  $("best").textContent = best;
+
+  function beep(i, ms, wrong) {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = wrong ? "sawtooth" : "sine"; o.frequency.value = wrong ? 90 : TONES[i];
+      g.gain.setValueAtTime(0.25, audio.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + ms / 1000);
+      o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + ms / 1000);
+    } catch {}
+  }
+
+  function light(i, ms) {
+    pads[i].classList.add("lit"); beep(i, ms);
+    return new Promise(r => setTimeout(() => { pads[i].classList.remove("lit"); setTimeout(r, ms * 0.35); }, ms));
+  }
+
+  async function playSequence() {
+    accepting = false;
+    $("status").textContent = "Watch…";
+    const speed = Math.max(MIN_SPEED, START_SPEED - (seq.length - 1) * SPEED_UP);
+    await new Promise(r => setTimeout(r, 500));
+    for (const i of seq) await light(i, speed);
+    step = 0; accepting = true;
+    $("status").textContent = "Your turn!";
+  }
+
+  function nextRound() {
+    seq.push(Math.floor(Math.random() * 4));
+    $("round").textContent = seq.length;
+    playSequence();
+  }
+
+  function press(i) {
+    if (!accepting) return;
+    light(i, 200);
+    if (i !== seq[step]) {
+      beep(0, 400, true);
+      accepting = false;
+      if (STRICT) return gameOver();
+      $("status").textContent = "Oops! Watch again…";
+      return setTimeout(playSequence, 800);
+    }
+    step++;
+    if (step === seq.length) {
+      accepting = false;
+      const done = seq.length;
+      if (done > best) { best = done; save("simon-best", best); $("best").textContent = best; }
+      $("status").textContent = "✓ Nice!";
+      setTimeout(nextRound, 800);
+    }
+  }
+
+  function gameOver() {
+    $("status").textContent = `Game over! You reached round ${seq.length}.`;
+    $("start").textContent = "↻ Again";
+  }
+
+  pads.forEach((p, i) => p.addEventListener("pointerdown", e => { e.preventDefault(); press(i); }));
+  $("start").addEventListener("click", () => { seq = []; $("start").textContent = "Simon"; nextRound(); });
+  document.addEventListener("keydown", e => { const i = "1234".indexOf(e.key); if (i >= 0) press(i); });
+</script>
+</body>
+</html>

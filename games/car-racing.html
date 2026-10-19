@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Car Racing Game</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/car-racing/">
+<!--
+  Free HTML Car Racing game — one file, no libraries, no images. Save it as car-racing.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  Dodge the traffic. Arrow keys / A D, tap the left or right half of the road, or swipe to change lanes.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #1b1446;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  canvas { display: block; width: min(96vw, 400px, calc((100vh - 16px) * 2 / 3)); aspect-ratio: 2 / 3; border-radius: 18px; background: #3aa35b; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="game" width="360" height="540"></canvas>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const LANES = 3;               // number of lanes
+  const START_SPEED = 5;         // road speed at the start
+  const SPEED_UP = 0.003;        // speed added every frame
+  const MAX_SPEED = 13;          // top speed
+  const SPAWN_EVERY = 52;        // frames between new cars at the start
+  const CAR_COLORS = ["#ffd23f", "#3fa6ff", "#b46bff", "#ff8a3d", "#ffffff"];   // traffic colors (yours is red)
+
+  const canvas = document.getElementById("game"), ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height, ROAD_X = 50, ROAD_W = W - 100, LANE_W = ROAD_W / LANES, CAR_W = 44, CAR_H = 76;
+  const laneX = l => ROAD_X + LANE_W * l + LANE_W / 2;
+  const load = k => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } };
+  const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  let player, cars, speed, road, score, frame, state, best = load("racing-best");
+
+  function reset() {
+    player = { lane: Math.floor(LANES / 2), x: laneX(Math.floor(LANES / 2)), y: H - 110 };
+    cars = []; speed = START_SPEED; road = 0; score = 0; frame = 0; state = "ready";
+  }
+
+  function steer(dir) {
+    if (state === "over") { if (frame > 30) reset(); return; }
+    if (state === "ready") state = "play";
+    player.lane = Math.max(0, Math.min(LANES - 1, player.lane + dir));
+  }
+
+  function update() {
+    frame++;
+    if (state !== "play") return;
+    speed = Math.min(MAX_SPEED, speed + SPEED_UP);
+    road = (road + speed) % 60;
+    player.x += (laneX(player.lane) - player.x) * 0.25;           // glide into the lane
+
+    if (frame % Math.max(22, Math.round(SPAWN_EVERY * START_SPEED / speed)) === 0) {
+      const lane = Math.floor(Math.random() * LANES);
+      // never block every lane at the same height
+      const blocked = new Set(cars.filter(c => c.y < CAR_H * 1.6).map(c => c.lane));
+      if (!blocked.has(lane) && blocked.size < LANES - 1) cars.push({ lane, y: -CAR_H, color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)], v: 0.35 + Math.random() * 0.25 });
+    }
+    for (const c of cars) {
+      c.y += speed * c.v + speed * 0.5;
+      if (!c.passed && c.y > player.y + CAR_H) { c.passed = true; score++; }
+      if (Math.abs(laneX(c.lane) - player.x) < CAR_W - 6 && Math.abs(c.y - player.y) < CAR_H - 8) {
+        state = "over"; frame = 0;
+        if (score > best) { best = score; save("racing-best", best); }
+      }
+    }
+    cars = cars.filter(c => c.y < H + CAR_H);
+  }
+
+  function car(x, y, color) {
+    ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x - CAR_W / 2 + 4, y + 6, CAR_W, CAR_H);   // shadow
+    ctx.fillStyle = color; ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x - CAR_W / 2, y, CAR_W, CAR_H, 10) : ctx.rect(x - CAR_W / 2, y, CAR_W, CAR_H);
+    ctx.fill();
+    ctx.fillStyle = "#1b1446";
+    ctx.fillRect(x - CAR_W / 2 + 7, y + 14, CAR_W - 14, 14);       // windscreen
+    ctx.fillRect(x - CAR_W / 2 + 7, y + CAR_H - 22, CAR_W - 14, 10);   // rear window
+    ctx.fillStyle = "#222";
+    [[-1, 10], [1, 10], [-1, CAR_H - 24], [1, CAR_H - 24]].forEach(([s, wy]) => ctx.fillRect(x + s * (CAR_W / 2) - (s > 0 ? 0 : 4), y + wy, 4, 14));
+  }
+
+  function draw() {
+    ctx.fillStyle = "#3aa35b"; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#4b4b5a"; ctx.fillRect(ROAD_X, 0, ROAD_W, H);
+    ctx.fillStyle = "#fff"; ctx.fillRect(ROAD_X - 6, 0, 6, H); ctx.fillRect(ROAD_X + ROAD_W, 0, 6, H);
+    for (let l = 1; l < LANES; l++) for (let y = road - 60; y < H; y += 60) ctx.fillRect(ROAD_X + LANE_W * l - 3, y, 6, 32);
+    cars.forEach(c => car(laneX(c.lane), c.y, c.color));
+    car(player.x, player.y, "#ff4d6d");
+
+    ctx.fillStyle = "#fff"; ctx.font = "800 18px system-ui, sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(`Score ${score}`, 12, 28);
+    ctx.textAlign = "right"; ctx.fillText(`${Math.round(speed * 12)} km/h`, W - 12, 28);
+    ctx.textAlign = "center";
+    if (state !== "play") {
+      ctx.fillStyle = "rgba(10,6,36,.7)"; ctx.fillRect(0, H / 2 - 90, W, 170); ctx.fillStyle = "#fff";
+      ctx.font = "900 36px system-ui, sans-serif"; ctx.fillText(state === "ready" ? "Car Racing" : "Crash! 💥", W / 2, H / 2 - 36);
+      ctx.font = "700 17px system-ui, sans-serif";
+      ctx.fillText(state === "ready" ? "Tap left / right or use the arrows" : `Score ${score} · Best ${best}`, W / 2, H / 2 + 2);
+      if (state === "ready" || frame > 30) ctx.fillText(state === "ready" ? "to change lanes" : "Tap to race again", W / 2, H / 2 + 34);
+    }
+  }
+
+  let last = 0, acc = 0;
+  function loop(t) {
+    acc += Math.min(100, t - (last || t)); last = t;
+    while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  let sx = null;
+  canvas.addEventListener("pointerdown", e => { e.preventDefault(); sx = e.clientX; });
+  canvas.addEventListener("pointerup", e => {
+    if (sx === null) return;
+    const r = canvas.getBoundingClientRect(), dx = e.clientX - sx;
+    sx = null;
+    if (Math.abs(dx) > 25) steer(dx > 0 ? 1 : -1);                       // swipe
+    else steer(e.clientX - r.left < r.width / 2 ? -1 : 1);               // tap left or right half
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "ArrowLeft" || e.key === "a") { e.preventDefault(); steer(-1); }
+    if (e.key === "ArrowRight" || e.key === "d") { e.preventDefault(); steer(1); }
+    if (e.key === " " && state !== "play") { e.preventDefault(); steer(0); }
+  });
+  reset();
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Number Guessing Game</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/number-guessing/">
+<!--
+  Free HTML Number Guessing game — one file, no libraries. Save it as number-guessing.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  The computer picks a secret number. Guess it in as few tries as you can: it tells you "higher" or "lower".
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    background: #1b1446; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; padding: 16px; text-align: center;
+  }
+  h1 { font-size: 26px; }
+  .sub { opacity: .8; }
+  .range { width: min(90vw, 380px); height: 26px; border-radius: 13px; background: #2a2170; position: relative; overflow: hidden; }
+  .range i { position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, #ff5fb1, #ffd23f); border-radius: 13px; transition: left .3s, width .3s; }
+  .range-labels { width: min(90vw, 380px); display: flex; justify-content: space-between; font-weight: 700; font-size: 14px; margin-top: -10px; }
+  form { display: flex; gap: 8px; }
+  input { width: 130px; padding: 12px; font: 800 24px system-ui, sans-serif; text-align: center; border: 0; border-radius: 14px; background: #fff; color: #1b1446; }
+  button { border: 0; border-radius: 14px; padding: 12px 22px; font: 700 18px system-ui, sans-serif; color: #fff; background: #36d35a; box-shadow: 0 4px 0 #1d9a3a; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  .hint { font-size: 22px; font-weight: 900; min-height: 30px; }
+  .tries { opacity: .85; font-weight: 700; }
+  .history { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 380px; }
+  .history span { padding: 4px 10px; border-radius: 10px; font-weight: 700; background: #2a2170; }
+  .history .up { background: #3f7bff; } .history .down { background: #ff8a3d; } .history .ok { background: #36d35a; }
+  #again[hidden] { display: none; }
+</style>
+</head>
+<body>
+  <h1>🔢 Guess the number</h1>
+  <p class="sub" id="sub"></p>
+  <div class="range"><i id="bar"></i></div>
+  <div class="range-labels"><span id="lo"></span><span id="hi"></span></div>
+  <form id="form"><input id="guess" type="number" inputmode="numeric" autocomplete="off" aria-label="Your guess"><button id="go">Guess</button></form>
+  <div class="hint" id="hint">Type a number and press Guess</div>
+  <div class="tries" id="tries"></div>
+  <div class="history" id="history"></div>
+  <button id="again" hidden>Play again</button>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const MIN = 1;                 // smallest possible number
+  const MAX = 100;               // biggest possible number
+  const MAX_TRIES = 7;           // guesses you get (7 is always enough for 1-100 if you halve the range)
+
+  const $ = id => document.getElementById(id);
+  let secret, tries, low, high, done;
+
+  function newGame() {
+    secret = MIN + Math.floor(Math.random() * (MAX - MIN + 1));
+    tries = 0; low = MIN; high = MAX; done = false;
+    $("sub").textContent = `I'm thinking of a number from ${MIN} to ${MAX}. You have ${MAX_TRIES} tries.`;
+    $("hint").textContent = "Type a number and press Guess";
+    $("history").innerHTML = ""; $("again").hidden = true; $("go").disabled = false; $("guess").value = "";
+    update(); $("guess").focus();
+  }
+
+  function guess(n) {
+    if (done) return;
+    if (!Number.isInteger(n) || n < MIN || n > MAX) { $("hint").textContent = `Enter a whole number from ${MIN} to ${MAX}`; return; }
+    tries++;
+    const chip = document.createElement("span");
+    chip.textContent = n;
+    if (n === secret) {
+      chip.className = "ok"; done = true; low = high = n;
+      $("hint").textContent = `🎉 Yes! It was ${secret}. You got it in ${tries} ${tries === 1 ? "try" : "tries"}.`;
+    } else {
+      const far = Math.abs(n - secret) > (MAX - MIN) / 4 ? "" : Math.abs(n - secret) <= 3 ? " 🔥 Very close!" : " Getting warm.";
+      if (n < secret) { chip.className = "up"; low = Math.max(low, n + 1); $("hint").textContent = `⬆ Higher than ${n}.${far}`; }
+      else { chip.className = "down"; high = Math.min(high, n - 1); $("hint").textContent = `⬇ Lower than ${n}.${far}`; }
+      if (tries >= MAX_TRIES) { done = true; $("hint").textContent = `😵 Out of tries. The number was ${secret}.`; }
+    }
+    $("history").appendChild(chip);
+    if (done) { $("again").hidden = false; $("go").disabled = true; }
+    $("guess").value = ""; update();
+  }
+
+  // the bar shows where the secret number can still be
+  function update() {
+    const span = MAX - MIN || 1;
+    $("bar").style.left = `${(low - MIN) / span * 100}%`;
+    $("bar").style.width = `${Math.max(2, (high - low) / span * 100)}%`;
+    $("lo").textContent = low; $("hi").textContent = high;
+    $("tries").textContent = done ? "" : `Tries left: ${MAX_TRIES - tries}`;
+  }
+
+  $("form").addEventListener("submit", e => { e.preventDefault(); guess(Number($("guess").value)); $("guess").focus(); });
+  $("again").addEventListener("click", newGame);
+  newGame();
+</script>
+</body>
+</html>

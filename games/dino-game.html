@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Dino Runner Game</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/dino-game/">
+<!--
+  Free HTML Dino Runner game (like the Chrome offline dinosaur) — one file, no libraries, no images.
+  Save it as dino-game.html and open it in a browser. From htmlgamescode.com (free to use in your own projects).
+  Controls: Space / Arrow Up / tap to jump. Jump over the cactus, the game keeps getting faster.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f4f1ea;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  canvas { display: block; width: min(96vw, 720px); aspect-ratio: 3 / 1; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="game" width="600" height="200"></canvas>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const GRAVITY = 0.6;           // how fast the dino falls
+  const JUMP = -11;              // jump strength (negative = up)
+  const START_SPEED = 6;         // starting run speed
+  const SPEED_UP = 0.0025;       // speed added every frame
+  const MAX_SPEED = 14;          // top speed
+  const INK = "#535353";         // color of everything
+
+  const canvas = document.getElementById("game"), ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height, GROUND = H - 30;
+  const load = k => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } };
+  const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+  let dino, cacti, clouds, speed, distance, nextGap, state, frame, best = load("dino-best");
+
+  function reset() {
+    dino = { x: 50, y: GROUND, vy: 0, w: 40, h: 44 };
+    cacti = []; clouds = [{ x: 200, y: 50 }, { x: 480, y: 30 }];
+    speed = START_SPEED; distance = 0; nextGap = 60; frame = 0; state = "ready";
+  }
+
+  function jump() {
+    if (state === "over") { if (frame > 20) { reset(); state = "play"; } return; }
+    if (state === "ready") state = "play";
+    if (dino.y >= GROUND) dino.vy = JUMP;
+  }
+
+  function update() {
+    frame++;
+    if (state !== "play") return;
+    speed = Math.min(MAX_SPEED, speed + SPEED_UP);
+    distance += speed;
+
+    dino.vy += GRAVITY; dino.y = Math.min(GROUND, dino.y + dino.vy);
+    if (dino.y === GROUND) dino.vy = 0;
+
+    if (--nextGap <= 0) {                         // new cactus group, random size and gap
+      const n = 1 + Math.floor(Math.random() * (speed > 9 ? 3 : 2)), tall = Math.random() < 0.5;
+      cacti.push({ x: W, w: n * 16, h: tall ? 46 : 32 });
+      nextGap = 45 + Math.random() * 70 + 300 / speed;
+    }
+    cacti.forEach(c => c.x -= speed);
+    cacti = cacti.filter(c => c.x + c.w > 0);
+    clouds.forEach(c => { c.x -= speed * 0.2; if (c.x < -60) { c.x = W + Math.random() * 100; c.y = 20 + Math.random() * 50; } });
+
+    // hit test with a slightly smaller box than the drawing, so near-misses feel fair
+    const d = { x: dino.x + 6, y: dino.y - dino.h + 6, w: dino.w - 14, h: dino.h - 8 };
+    for (const c of cacti) if (d.x < c.x + c.w - 3 && d.x + d.w > c.x + 3 && d.y + d.h > GROUND - c.h) {
+      state = "over"; frame = 0;
+      const s = Math.floor(distance / 10);
+      if (s > best) { best = s; save("dino-best", best); }
+    }
+  }
+
+  function drawDino() {
+    const x = dino.x, y = dino.y - dino.h, run = state === "play" && dino.y === GROUND ? Math.floor(frame / 6) % 2 : -1;
+    ctx.fillStyle = INK;
+    ctx.fillRect(x + 18, y, 22, 16);                 // head
+    ctx.fillRect(x + 6, y + 14, 24, 20);             // body
+    ctx.fillRect(x, y + 16, 8, 8);                   // tail
+    ctx.fillRect(x + 28, y + 20, 6, 4);              // arm
+    ctx.fillRect(x + 10, y + 34, 6, run === 0 ? 6 : 10);   // legs take turns
+    ctx.fillRect(x + 22, y + 34, 6, run === 1 ? 6 : 10);
+    ctx.fillStyle = "#fff"; ctx.fillRect(x + 24, y + 4, 4, 4);   // eye
+    if (state === "over") { ctx.fillStyle = INK; ctx.fillRect(x + 25, y + 5, 2, 2); }
+  }
+
+  function drawCactus(c) {
+    ctx.fillStyle = INK;
+    for (let i = 0; i < c.w / 16; i++) {
+      const x = c.x + i * 16;
+      ctx.fillRect(x + 5, GROUND - c.h, 6, c.h);
+      ctx.fillRect(x, GROUND - c.h * 0.65, 4, c.h * 0.3); ctx.fillRect(x, GROUND - c.h * 0.4, 6, 3);
+      ctx.fillRect(x + 12, GROUND - c.h * 0.8, 4, c.h * 0.35); ctx.fillRect(x + 10, GROUND - c.h * 0.5, 6, 3);
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#d8d4ca";
+    clouds.forEach(c => { ctx.fillRect(c.x, c.y, 46, 10); ctx.fillRect(c.x + 10, c.y - 8, 24, 10); });
+    ctx.fillStyle = INK; ctx.fillRect(0, GROUND, W, 2);
+    for (let i = 0; i < 12; i++) ctx.fillRect(((i * 67 - distance) % W + W) % W, GROUND + 8 + (i % 3) * 5, 3 + (i % 4), 2);   // pebbles
+    cacti.forEach(drawCactus);
+    drawDino();
+
+    ctx.fillStyle = INK; ctx.font = "700 16px ui-monospace, Menlo, monospace"; ctx.textAlign = "right";
+    ctx.fillText(`HI ${String(best).padStart(5, "0")}  ${String(Math.floor(distance / 10)).padStart(5, "0")}`, W - 12, 24);
+    ctx.textAlign = "center";
+    if (state === "ready") { ctx.font = "700 18px system-ui, sans-serif"; ctx.fillText("Press Space or tap to start", W / 2, 80); }
+    if (state === "over") { ctx.font = "900 26px system-ui, sans-serif"; ctx.fillText("G A M E   O V E R", W / 2, 76); ctx.font = "600 15px system-ui, sans-serif"; ctx.fillText("Tap or press Space to restart", W / 2, 104); }
+  }
+
+  let last = 0, acc = 0;
+  function loop(t) {
+    acc += Math.min(100, t - (last || t)); last = t;
+    while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  document.addEventListener("pointerdown", e => { e.preventDefault(); jump(); });
+  document.addEventListener("keydown", e => { if (e.key === " " || e.key === "ArrowUp") { e.preventDefault(); jump(); } });
+  reset();
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

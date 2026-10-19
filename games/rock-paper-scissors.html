@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rock Paper Scissors</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/rock-paper-scissors/">
+<!--
+  Free HTML Rock Paper Scissors game — one file, no libraries. Save it as rock-paper-scissors.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  Pick rock, paper or scissors. First to 5 wins. Keys: R, P, S.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: #1b1446; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 12px; user-select: none; -webkit-user-select: none; text-align: center;
+  }
+  .score { display: flex; gap: 10px; font-weight: 800; }
+  .score span { background: #2a2170; padding: 8px 14px; border-radius: 12px; }
+  .arena { display: flex; align-items: center; gap: 18px; }
+  .hand { width: min(30vw, 120px); aspect-ratio: 1; display: grid; place-items: center; border-radius: 26px; background: #2a2170; font-size: min(16vw, 64px); box-shadow: 0 6px 0 #20185a; }
+  .hand.win { background: #36d35a; box-shadow: 0 6px 0 #1d9a3a; }
+  .hand.shake { animation: shake .5s ease-in-out; }
+  @keyframes shake { 0%, 100% { transform: translateY(0); } 25%, 75% { transform: translateY(-14px); } 50% { transform: translateY(6px); } }
+  .vs { font-weight: 900; opacity: .6; }
+  .label { font-size: 13px; opacity: .7; margin-top: 6px; }
+  .result { font-size: 24px; font-weight: 900; min-height: 32px; }
+  .choices { display: flex; gap: 12px; }
+  .choices button { width: min(26vw, 96px); aspect-ratio: 1; border: 0; border-radius: 22px; font-size: min(12vw, 46px); background: #ff5fb1; box-shadow: 0 6px 0 #b8327a; cursor: pointer; }
+  .choices button:active { transform: translateY(4px); box-shadow: 0 2px 0 #b8327a; }
+  .choices button:disabled { opacity: .5; }
+  .again { border: 0; border-radius: 14px; padding: 12px 26px; font: 700 18px system-ui, sans-serif; color: #fff; background: #36d35a; box-shadow: 0 4px 0 #1d9a3a; cursor: pointer; }
+  .again[hidden] { display: none; }
+</style>
+</head>
+<body>
+  <div class="score"><span>You: <b id="you">0</b></span><span>Computer: <b id="cpu">0</b></span></div>
+  <div class="arena">
+    <div><div class="hand" id="handYou">❔</div><div class="label">You</div></div>
+    <div class="vs">VS</div>
+    <div><div class="hand" id="handCpu">❔</div><div class="label">Computer</div></div>
+  </div>
+  <div class="result" id="result">Make your move!</div>
+  <div class="choices" id="choices"></div>
+  <button class="again" id="again" hidden>Play again</button>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const WIN_SCORE = 5;           // first to this many wins the match
+  const SHAKE_MS = 500;          // length of the "rock, paper, scissors…" shake
+  const CHOICES = { rock: "✊", paper: "✋", scissors: "✌️" };   // the emoji for each move
+
+  const BEATS = { rock: "scissors", paper: "rock", scissors: "paper" };   // key beats value
+  const $ = id => document.getElementById(id);
+  const score = { you: 0, cpu: 0 };
+  let busy = false;
+
+  const buttons = Object.entries(CHOICES).map(([name, emoji]) => {
+    const b = document.createElement("button");
+    b.textContent = emoji; b.title = name; b.setAttribute("aria-label", name);
+    b.addEventListener("click", () => play(name));
+    $("choices").appendChild(b);
+    return b;
+  });
+
+  function play(you) {
+    if (busy || score.you >= WIN_SCORE || score.cpu >= WIN_SCORE) return;
+    busy = true; buttons.forEach(b => b.disabled = true);
+    const names = Object.keys(CHOICES), cpu = names[Math.floor(Math.random() * names.length)];
+    const hy = $("handYou"), hc = $("handCpu");
+    hy.textContent = hc.textContent = CHOICES.rock;            // both fists shake first
+    hy.className = hc.className = "hand shake";
+    $("result").textContent = "Rock… paper… scissors…";
+    setTimeout(() => {
+      hy.textContent = CHOICES[you]; hc.textContent = CHOICES[cpu];
+      hy.className = hc.className = "hand";
+      let text;
+      if (you === cpu) text = "It's a tie!";
+      else if (BEATS[you] === cpu) { score.you++; hy.classList.add("win"); text = `${cap(you)} beats ${cpu}. You win the round!`; }
+      else { score.cpu++; hc.classList.add("win"); text = `${cap(cpu)} beats ${you}. Computer wins the round.`; }
+      $("you").textContent = score.you; $("cpu").textContent = score.cpu;
+      if (score.you >= WIN_SCORE || score.cpu >= WIN_SCORE) {
+        text = score.you > score.cpu ? "🏆 You won the match!" : "🤖 The computer won the match.";
+        $("again").hidden = false;
+      }
+      $("result").textContent = text;
+      busy = false; buttons.forEach(b => b.disabled = false);
+    }, SHAKE_MS);
+  }
+
+  const cap = s => s[0].toUpperCase() + s.slice(1);
+  $("again").addEventListener("click", () => {
+    score.you = score.cpu = 0; $("you").textContent = $("cpu").textContent = 0;
+    $("handYou").textContent = $("handCpu").textContent = "❔"; $("handYou").className = $("handCpu").className = "hand";
+    $("result").textContent = "Make your move!"; $("again").hidden = true;
+  });
+  document.addEventListener("keydown", e => { const k = { r: "rock", p: "paper", s: "scissors" }[e.key.toLowerCase()]; if (k) play(k); });
+</script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Sliding Puzzle Game</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/sliding-puzzle/">
+<!--
+  Free HTML Sliding Puzzle (15 puzzle) game — one file, no libraries. Save it as sliding-puzzle.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  Slide the tiles into the empty space until the numbers are in order. Click/tap a tile, or use the arrow keys.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    background: #1b1446; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation; padding: 12px;
+  }
+  .bar { width: min(92vw, 380px, calc(100vh - 140px)); min-width: 260px; display: flex; justify-content: space-between; gap: 6px; font-weight: 700; }
+  .bar span { background: #2a2170; padding: 6px 10px; border-radius: 10px; }
+  .board { position: relative; width: min(92vw, 380px, calc(100vh - 140px)); aspect-ratio: 1; padding: 8px; border-radius: 18px; background: #382c8f; }
+  .tile {
+    position: absolute; display: grid; place-items: center; border: 0; border-radius: 12px; cursor: pointer;
+    font-weight: 900; color: #fff; background: linear-gradient(160deg, #ff7cc4, #ff5fb1); box-shadow: inset 0 -5px 0 rgba(0,0,0,.2);
+    transition: left .12s ease-out, top .12s ease-out;
+  }
+  .tile.home { background: linear-gradient(160deg, #5be37a, #36d35a); }
+  .sizes { display: flex; gap: 8px; }
+  button.opt, #shuffle { border: 0; border-radius: 12px; padding: 9px 14px; font: 700 15px system-ui, sans-serif; color: #fff; background: #2a2170; cursor: pointer; }
+  button.opt.on { background: #ffd23f; color: #1b1446; }
+  #shuffle { background: #36d35a; box-shadow: 0 4px 0 #1d9a3a; }
+  .msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; border-radius: 18px; background: rgba(27, 20, 70, .85); }
+  .msg[hidden] { display: none; }
+  .msg h1 { font-size: 30px; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+  <div class="bar"><span>Moves: <b id="moves">0</b></span><span>⏱ <b id="time">0</b>s</span><span>Best: <b id="best">–</b></span></div>
+  <div class="board" id="board"><div class="msg" id="msg" hidden><div><h1>🎉 Solved!</h1><p id="result"></p></div></div></div>
+  <div class="sizes"><button class="opt" data-size="3">3×3</button><button class="opt" data-size="4">4×4</button><button class="opt" data-size="5">5×5</button><button id="shuffle">🔀 Shuffle</button></div>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const START_SIZE = 4;          // 3 = 8 puzzle, 4 = 15 puzzle, 5 = 24 puzzle
+  const SHUFFLE_MOVES = 300;     // random slides used to mix the board (always solvable)
+  const GAP = 8;                 // space between tiles in pixels
+
+  const $ = id => document.getElementById(id);
+  const board = $("board");
+  const load = k => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } };
+  const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  let size, cells, tiles = [], moves, started, timer, solved;
+
+  // cells[i] = the number on square i (0 = the empty square). Solved: 1, 2, 3 … with 0 last.
+  function newGame(n) {
+    size = n;
+    document.querySelectorAll(".opt").forEach(b => b.classList.toggle("on", Number(b.dataset.size) === n));
+    tiles.forEach(t => t.remove());
+    tiles = [];
+    for (let v = 1; v < n * n; v++) {
+      const t = document.createElement("button");
+      t.className = "tile"; t.textContent = v;
+      t.addEventListener("click", () => slide(cells.indexOf(v)));
+      board.insertBefore(t, $("msg")); tiles[v] = t;
+    }
+    cells = [...Array(n * n).keys()].map(i => (i + 1) % (n * n));
+    // shuffle by making random legal slides from the solved board, so it can always be solved
+    let last = -1;
+    for (let k = 0; k < SHUFFLE_MOVES; k++) {
+      const options = neighbours(cells.indexOf(0)).filter(i => i !== last);
+      const pick = options[Math.floor(Math.random() * options.length)];
+      last = cells.indexOf(0); swap(pick);
+    }
+    if (isSolved()) return newGame(n);
+    moves = 0; started = 0; solved = false; clearInterval(timer);
+    $("msg").hidden = true; render(); stats();
+  }
+
+  function neighbours(i) {
+    const r = Math.floor(i / size), c = i % size, out = [];
+    if (r > 0) out.push(i - size);
+    if (r < size - 1) out.push(i + size);
+    if (c > 0) out.push(i - 1);
+    if (c < size - 1) out.push(i + 1);
+    return out;
+  }
+
+  function swap(i) { const e = cells.indexOf(0); [cells[e], cells[i]] = [cells[i], cells[e]]; }
+
+  // a tile in the same row or column as the gap can slide (it pushes the tiles between them too)
+  function slide(i) {
+    if (solved) return;
+    const e = cells.indexOf(0);
+    const sameRow = Math.floor(i / size) === Math.floor(e / size), sameCol = i % size === e % size;
+    if (i === e || !(sameRow || sameCol)) return;
+    const step = sameRow ? Math.sign(i - e) : Math.sign(i - e) * size;
+    for (let k = e + step; ; k += step) { swap(k); moves++; if (k === i) break; }
+    if (!started) { started = Date.now(); timer = setInterval(stats, 1000); }
+    render(); stats();
+    if (isSolved()) win();
+  }
+
+  const isSolved = () => cells.every((v, i) => v === (i + 1) % (size * size));
+
+  function render() {
+    const inner = board.clientWidth - 16, cell = (inner - GAP * (size - 1)) / size;
+    cells.forEach((v, i) => {
+      if (!v) return;
+      const t = tiles[v];
+      t.style.width = t.style.height = `${cell}px`;
+      t.style.left = `${8 + (i % size) * (cell + GAP)}px`;
+      t.style.top = `${8 + Math.floor(i / size) * (cell + GAP)}px`;
+      t.style.fontSize = `${cell * 0.42}px`;
+      t.classList.toggle("home", v === i + 1);   // green = already in the right place
+    });
+  }
+
+  function seconds() { return started ? Math.floor((Date.now() - started) / 1000) : 0; }
+  function stats() {
+    $("moves").textContent = moves; $("time").textContent = seconds();
+    $("best").textContent = load(`slide-best-${size}`) || "–";
+  }
+
+  function win() {
+    solved = true; clearInterval(timer);
+    const best = load(`slide-best-${size}`), record = !best || moves < best;
+    if (record) save(`slide-best-${size}`, moves);
+    $("result").textContent = `${moves} moves in ${seconds()} seconds.${record ? " New best! 🏆" : ""}`;
+    stats(); setTimeout(() => { $("msg").hidden = false; }, 250);
+  }
+
+  // arrow keys move the tile next to the gap into it
+  document.addEventListener("keydown", e => {
+    const g = cells.indexOf(0), r = Math.floor(g / size), c = g % size;
+    const target = { ArrowUp: r < size - 1 && g + size, ArrowDown: r > 0 && g - size, ArrowLeft: c < size - 1 && g + 1, ArrowRight: c > 0 && g - 1 }[e.key];
+    if (target === undefined) return;
+    e.preventDefault();
+    if (target !== false) slide(target);
+  });
+  document.querySelectorAll(".opt").forEach(b => b.addEventListener("click", () => newGame(Number(b.dataset.size))));
+  $("shuffle").addEventListener("click", () => newGame(size));
+  $("msg").addEventListener("click", () => newGame(size));
+  addEventListener("resize", render);
+  newGame(START_SIZE);
+</script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Typing Speed Game</title>
+<link rel="canonical" href="https://www.htmlgamescode.com/free-games/typing-game/">
+<!--
+  Free HTML Typing Speed game (WPM test) — one file, no libraries. Save it as typing-game.html and open it in a browser.
+  From htmlgamescode.com (free to use in your own projects).
+  Type the words as fast as you can. The timer starts with your first key. Press Space after each word.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    background: #1b1446; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; padding: 14px;
+  }
+  h1 { font-size: 24px; }
+  .stats { display: flex; gap: 8px; font-weight: 800; }
+  .stats span { background: #2a2170; padding: 6px 12px; border-radius: 10px; }
+  .words { width: min(94vw, 440px); height: 132px; overflow: hidden; padding: 12px 14px; border-radius: 16px; background: #2a2170; font: 600 22px/1.6 ui-monospace, Menlo, monospace; }
+  .words span { margin-right: 10px; border-radius: 5px; }
+  .words .now { background: rgba(255,255,255,.15); }
+  .words .ok { color: #7dff5a; } .words .bad { color: #ff4d6d; text-decoration: line-through; }
+  input { width: min(94vw, 440px); padding: 12px 14px; font: 600 20px ui-monospace, Menlo, monospace; border: 3px solid #382c8f; border-radius: 14px; background: #fff; color: #1b1446; outline: none; }
+  input.wrong { border-color: #ff4d6d; }
+  button { border: 0; border-radius: 14px; padding: 11px 24px; font: 700 17px system-ui, sans-serif; color: #fff; background: #ff5fb1; box-shadow: 0 4px 0 #b8327a; cursor: pointer; }
+  .result { font-size: 20px; font-weight: 800; text-align: center; min-height: 28px; }
+</style>
+</head>
+<body>
+  <h1>⌨️ Typing Speed Test</h1>
+  <div class="stats"><span>⏱ <b id="time">0</b>s</span><span>WPM: <b id="wpm">0</b></span><span>Best: <b id="best">0</b></span></div>
+  <div class="words" id="words"></div>
+  <input id="input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Start typing here…" aria-label="Type the words">
+  <div class="result" id="result"></div>
+  <button id="restart">↻ Restart</button>
+
+<script>
+  // ---- settings: change these to make it your own ----
+  const SECONDS = 30;            // length of the test
+  const WORD_COUNT = 120;        // words shown per test
+  const WORDS = "the be to of and a in that have it for not on with he as you do at this but his by from they we say her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us apple river light house green music happy water smile cloud dream world quick brown jump over lazy dog fast learn code game play score level".split(" ");   // the words to type
+
+  const $ = id => document.getElementById(id);
+  const load = k => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } };
+  const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  let list, spans, index, correctChars, typedWords, started, timer, finished, best = load("typing-best");
+
+  function newTest() {
+    list = Array.from({ length: WORD_COUNT }, () => WORDS[Math.floor(Math.random() * WORDS.length)]);
+    $("words").innerHTML = list.map(w => `<span>${w}</span>`).join(" ");
+    spans = [...$("words").children];
+    index = 0; correctChars = 0; typedWords = 0; started = 0; finished = false;
+    clearInterval(timer);
+    $("time").textContent = SECONDS; $("wpm").textContent = 0; $("best").textContent = best; $("result").textContent = "";
+    $("input").value = ""; $("input").disabled = false; $("input").className = ""; $("input").focus();
+    mark();
+  }
+
+  function mark() {
+    spans.forEach(s => s.classList.remove("now"));
+    if (spans[index]) {
+      spans[index].classList.add("now");
+      $("words").scrollTop = spans[index].offsetTop - $("words").offsetTop - 12;   // keep the current line at the top
+    }
+  }
+
+  function wpm() {
+    const minutes = started ? Math.max(1 / 60, (Date.now() - started) / 60000) : 1;
+    return Math.round(correctChars / 5 / minutes);      // 1 "word" = 5 characters, the standard WPM formula
+  }
+
+  function tick() {
+    const left = Math.max(0, SECONDS - Math.floor((Date.now() - started) / 1000));
+    $("time").textContent = left; $("wpm").textContent = wpm();
+    if (left === 0) finish();
+  }
+
+  function finish() {
+    finished = true; clearInterval(timer); $("input").disabled = true;
+    const score = Math.round(correctChars / 5 / (SECONDS / 60));
+    const accuracy = typedWords ? Math.round(spans.slice(0, index).filter(s => s.classList.contains("ok")).length / typedWords * 100) : 0;
+    const record = score > best;
+    if (record) { best = score; save("typing-best", best); }
+    $("wpm").textContent = score; $("best").textContent = best;
+    $("result").textContent = `${score} WPM · ${accuracy}% accuracy${record ? " · New best! 🏆" : ""}`;
+  }
+
+  $("input").addEventListener("input", e => {
+    if (finished) return;
+    if (!started) { started = Date.now(); timer = setInterval(tick, 250); }
+    const value = e.target.value;
+    if (value.endsWith(" ")) {                           // space = check the word and move on
+      const typed = value.trim();
+      if (!typed) { e.target.value = ""; return; }
+      const ok = typed === list[index];
+      spans[index].classList.add(ok ? "ok" : "bad");
+      if (ok) correctChars += typed.length + 1;          // +1 for the space
+      typedWords++; index++;
+      e.target.value = ""; e.target.className = "";
+      mark();
+      if (index >= list.length) finish();
+    } else {
+      e.target.className = list[index].startsWith(value) ? "" : "wrong";   // red border while it's wrong
+    }
+  });
+  $("restart").addEventListener("click", newTest);
+  newTest();
+</script>
+</body>
+</html>
